@@ -14,7 +14,7 @@ edition = "2018"
 [dependencies]
 tokio = "1.0"
 futures-core = "0.3.1"
-rustls = { git = "https://github.com/Pencil-Yao/ring", branch = "smx" }
+rustls = { git = "https://github.com/Pencil-Yao/rustls", branch = "smx" }
 webpki = { git = "https://github.com/Pencil-Yao/webpki", branch = "smx" }
 
 [features]
