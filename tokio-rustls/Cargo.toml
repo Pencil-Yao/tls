@@ -25,4 +25,4 @@ dangerous_configuration = ["rustls/dangerous_configuration"]
 tokio = { version = "1.0", features = ["full"] }
 futures-util = "0.3.1"
 lazy_static = "1"
-webpki-roots = "0.21"
+webpki-roots = { git = "https://github.com/Pencil-Yao/webpki-roots", branch = "smx" }
