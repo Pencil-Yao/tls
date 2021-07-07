@@ -1,11 +1,11 @@
-#![doc(html_root_url = "https://docs.rs/tokio-native-tls/0.1.0")]
+#![doc(html_root_url = "https://docs.rs/tokio-native-tls/0.3.0")]
 #![warn(
     missing_debug_implementations,
     missing_docs,
     rust_2018_idioms,
     unreachable_pub
 )]
-#![deny(intra_doc_link_resolution_failure)]
+#![deny(broken_intra_doc_links)]
 #![doc(test(
     no_crate_inject,
     attr(deny(warnings, rust_2018_idioms), allow(dead_code, unused_variables))
@@ -28,14 +28,13 @@
 //! built. Configuration of TLS parameters is still primarily done through the
 //! `native-tls` crate.
 
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
-use native_tls::{Error, HandshakeError, MidHandshakeTlsStream};
+use crate::native_tls::{Error, HandshakeError, MidHandshakeTlsStream};
 use std::fmt;
 use std::future::Future;
 use std::io::{self, Read, Write};
 use std::marker::Unpin;
-use std::mem::MaybeUninit;
 use std::pin::Pin;
 use std::ptr::null_mut;
 use std::task::{Context, Poll};
@@ -133,7 +132,9 @@ where
     S: AsyncRead + Unpin,
 {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.with_context(|ctx, stream| stream.poll_read(ctx, buf))
+        let mut buf = ReadBuf::new(buf);
+        self.with_context(|ctx, stream| stream.poll_read(ctx, &mut buf))?;
+        Ok(buf.filled().len())
     }
 }
 
@@ -186,19 +187,16 @@ impl<S> AsyncRead for TlsStream<S>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    unsafe fn prepare_uninitialized_buffer(&self, _: &mut [MaybeUninit<u8>]) -> bool {
-        // Note that this does not forward to `S` because the buffer is
-        // unconditionally filled in by OpenSSL, not the actual object `S`.
-        // We're decrypting bytes from `S` into the buffer above!
-        false
-    }
-
     fn poll_read(
         mut self: Pin<&mut Self>,
         ctx: &mut Context<'_>,
-        buf: &mut [u8],
-    ) -> Poll<io::Result<usize>> {
-        self.with_context(ctx, |s| s.read(buf))
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        self.with_context(ctx, |s| {
+            let n = s.read(buf.initialize_unfilled())?;
+            buf.advance(n);
+            Ok(())
+        })
     }
 }
 
@@ -360,4 +358,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Future for MidHandshake<S> {
             Err(HandshakeError::Failure(e)) => Poll::Ready(Err(e)),
         }
     }
+}
+
+/// re-export native_tls
+pub mod native_tls {
+    pub use native_tls::*;
 }
